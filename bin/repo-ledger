@@ -1,0 +1,164 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# repo-ledger
+# Create a lightweight Markdown inventory file for the current Git repo.
+
+force=0
+
+usage() {
+  echo "Usage: repo-ledger [--force]"
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --force)
+      force=1
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "ERROR: Unknown option: $1"
+      echo
+      usage
+      exit 1
+      ;;
+  esac
+  shift
+done
+
+if ! command -v git >/dev/null 2>&1; then
+  echo "ERROR: git is not installed or not on PATH."
+  exit 1
+fi
+
+if ! repo_root="$(git rev-parse --show-toplevel 2>/dev/null)"; then
+  echo "ERROR: Not inside a Git repository."
+  exit 1
+fi
+
+cd "$repo_root"
+
+warnings=()
+
+if git symbolic-ref --quiet HEAD >/dev/null; then
+  branch="$(git branch --show-current)"
+else
+  branch="(detached HEAD)"
+  warnings+=("Repo is in detached HEAD state.")
+fi
+
+has_commits=0
+if head="$(git rev-parse --short HEAD 2>/dev/null)"; then
+  has_commits=1
+else
+  head="(no commits)"
+  warnings+=("Repo has no commits.")
+fi
+
+has_origin=0
+if git remote get-url origin >/dev/null 2>&1; then
+  has_origin=1
+  remote_url="$(git remote get-url origin)"
+  repo_name="$(basename -s .git "$remote_url")"
+
+  echo "Fetching latest remote state..."
+  git fetch origin --prune
+else
+  remote_url="(no origin remote)"
+  repo_name="$(basename "$repo_root")"
+fi
+
+out="../repo_${repo_name}.md"
+
+status="$(git status -sb)"
+porcelain="$(git status --porcelain)"
+
+echo
+echo "Repository: $repo_name"
+echo "Root:       $repo_root"
+echo "Remote:     $remote_url"
+echo
+echo "$status"
+echo
+
+if [[ -n "$porcelain" ]]; then
+  warnings+=("Working tree is not clean.")
+fi
+
+if (( has_origin )) && ! git rev-parse --abbrev-ref --symbolic-full-name '@{u}' >/dev/null 2>&1; then
+  warnings+=("Current branch has no upstream branch.")
+fi
+
+if echo "$status" | grep -q '\[ahead '; then
+  warnings+=("Repo has local commits that have not been pushed.")
+fi
+
+if (( ${#warnings[@]} > 0 && ! force )); then
+  for warning in "${warnings[@]}"; do
+    echo "ERROR: $warning"
+  done
+  echo
+
+  if [[ -n "$porcelain" ]]; then
+    git status --short
+    echo
+  fi
+
+  echo "Fix these issues and rerun repo-ledger, or use repo-ledger --force to create a snapshot with warnings."
+  exit 1
+fi
+
+if (( ${#warnings[@]} > 0 )); then
+  echo "WARNING: Creating snapshot with warnings because --force was used."
+  for warning in "${warnings[@]}"; do
+    echo "- $warning"
+  done
+  echo
+fi
+
+{
+  echo "# ${repo_name}"
+  echo
+  echo "Snapshot: $(date '+%Y-%m-%d %H:%M:%S')"
+  echo
+  echo "## Repository"
+  echo
+  echo "- Root: \`${repo_root}\`"
+  echo "- Remote: \`${remote_url}\`"
+  echo "- Branch: \`${branch}\`"
+  echo "- HEAD: \`${head}\`"
+  if (( force )); then
+    echo "- Force: \`true\`"
+  fi
+  if (( ${#warnings[@]} > 0 )); then
+    echo
+    echo "## Warnings"
+    echo
+    for warning in "${warnings[@]}"; do
+      echo "- ${warning}"
+    done
+  fi
+  echo
+  echo "## Status"
+  echo
+  echo '```text'
+  git status -sb
+  echo '```'
+  echo
+  echo "## Recent Commits"
+  echo
+  if (( has_commits )); then
+    git log -10 --pretty=format:'- `%h` %ad — %s' --date=short
+  else
+    echo "(none)"
+  fi
+  echo
+  echo
+  echo "---"
+  echo
+} >> "$out"
+
+echo "Ledger snapshot appended to: $out"
