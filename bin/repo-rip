@@ -1,23 +1,59 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# repo-ledger
+# repo-rip
 # Create a lightweight Markdown inventory file for the current Git repo.
 
 force=0
+uppercase=0
+append_date=0
 
 usage() {
-  echo "Usage: repo-ledger [--force]"
+  echo "Usage: repo-rip [-f] [-u] [-d] [--force] [--uppercase] [--date]"
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --force)
+    -f|--force)
       force=1
+      ;;
+    -u|--uppercase)
+      uppercase=1
+      ;;
+    -d|--date)
+      append_date=1
       ;;
     -h|--help)
       usage
       exit 0
+      ;;
+    -[!-]*)
+      cluster="${1#-}"
+      while [[ -n "$cluster" ]]; do
+        flag="${cluster:0:1}"
+        cluster="${cluster:1}"
+        case "$flag" in
+          f)
+            force=1
+            ;;
+          u)
+            uppercase=1
+            ;;
+          d)
+            append_date=1
+            ;;
+          h)
+            usage
+            exit 0
+            ;;
+          *)
+            echo "ERROR: Unknown option: -$flag"
+            echo
+            usage
+            exit 1
+            ;;
+        esac
+      done
       ;;
     *)
       echo "ERROR: Unknown option: $1"
@@ -71,7 +107,16 @@ else
   repo_name="$(basename "$repo_root")"
 fi
 
-out="../repo_${repo_name}.md"
+prefix="rip_"
+if (( uppercase )); then
+  prefix="RIP_"
+fi
+
+out="../${prefix}${repo_name}"
+if (( append_date )); then
+  out+="_$(date '+%Y-%m-%d')"
+fi
+out+=".md"
 
 status="$(git status -sb)"
 porcelain="$(git status --porcelain)"
@@ -107,7 +152,7 @@ if (( ${#warnings[@]} > 0 && ! force )); then
     echo
   fi
 
-  echo "Fix these issues and rerun repo-ledger, or use repo-ledger --force to create a snapshot with warnings."
+  echo "Fix these issues and rerun repo-rip, or use repo-rip --force to create a snapshot with warnings."
   exit 1
 fi
 
@@ -161,4 +206,4 @@ fi
   echo
 } >> "$out"
 
-echo "Ledger snapshot appended to: $out"
+echo "RIP marker appended to: $out"
