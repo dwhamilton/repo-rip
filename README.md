@@ -37,20 +37,22 @@ rip_*.md file          = R.I.P. grave marker
 
 ## Install
 
-Clone this repo, then put the script somewhere on your PATH.
+`repo-rip` is a Bash script for macOS, Linux, and other Unix-like shells. On Windows, use WSL or Git Bash.
 
 ```sh
-chmod +x bin/repo-rip
+curl -fsSL https://raw.githubusercontent.com/dwhamilton/repo-rip/main/bin/repo-rip \
+  -o repo-rip
+chmod +x repo-rip
+sudo mv repo-rip /usr/local/bin/repo-rip
 ```
 
-Example:
+Verify:
 
 ```sh
-mkdir -p ~/bin
-cp bin/repo-rip ~/bin/repo-rip
+repo-rip --help
 ```
 
-Make sure `~/bin` is on your PATH.
+If you do not use `sudo`, move `repo-rip` to any directory on your PATH.
 
 ## Usage
 
